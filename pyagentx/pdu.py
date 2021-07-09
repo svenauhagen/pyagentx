@@ -234,6 +234,18 @@ class PDU(object):
 
 
     def decode_header(self):
+        ret = {
+            'version': '',
+            'pdu_type': '',
+            'pdu_type_name': '',
+            'flags': '',
+            'reserved': '',
+            'session_id': '',
+            'transaction_id': '',
+            'packet_id': '',
+            'payload_length': '',
+        }
+
         try:
             t = struct.unpack('!BBBBLLLL', self.decode_buf[:20])
             self.decode_buf = self.decode_buf[20:]
@@ -262,6 +274,7 @@ class PDU(object):
             logger.exception('Invalid packing: %d' % len(self.decode_buf))
             logger.debug('%s' % pprint.pformat(self.decode_buf))
 
+        return ret
 
     def decode(self, buf):
         self.set_decode_buf(buf)

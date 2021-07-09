@@ -79,14 +79,26 @@ class Network(threading.Thread):
             self._recv_buf += self.socket.recv(1024)
             if len(self._recv_buf) < 20:
                 return None
+
         payload_len = struct.unpack('!L', self._recv_buf[16:20])[0]
         logger.debug('buffer length {}, pdu length {}'.format(len(self._recv_buf), 20+payload_len))
         pdu = PDU()
-        pdu.decode(self._recv_buf[:20+payload_len])
+
+        try:
+            # This might fail on garbage input or processing error
+            pdu.decode(self._recv_buf[:20+payload_len])
+        except Exception as e:
+            logger.error(e)
+            pdu.error = pyagentx.ERROR_PROCESSINGERROR
+
         self._recv_buf = self._recv_buf[20+payload_len:]
-        if self.debug: pdu.dump()
+
+        if self.debug:
+            pdu.dump()
+
         if len(self._recv_buf) > 0:
             logger.debug('remaining buffer length {}'.format(len(self._recv_buf)))
+
         return pdu
 
 
@@ -184,10 +196,16 @@ class Network(threading.Thread):
                 request = self.recv_pdu()
             except socket.timeout:
                 continue
+            except Exception as e:
+                # Processing error
+                logger.error(e)
+                continue
 
             if not request:
                 logger.error("Empty PDU, connection closed!")
                 raise socket.error
+            elif pdu.error == pyagentx.ERROR_PROCESSINGERROR:
+                continue
 
             response = self.response_pdu(request)
             if request.type == pyagentx.AGENTX_GET_PDU:
@@ -261,6 +279,11 @@ class Network(threading.Thread):
                     handler.network_cleanup(request.session_id, request.transaction_id)
                 logger.info("Received CLEANUP PDU")
 
-            self.send_pdu(response)
-
-
+            try:
+                self.send_pdu(response)
+            except socket.timeout:
+                raise socket.error
+            except Exception as e:
+                # Processing error
+                logger.error(e)
+                continue
